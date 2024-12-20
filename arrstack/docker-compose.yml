@@ -1,0 +1,120 @@
+services:
+  protonwire:
+    container_name: protonwire
+    image: ghcr.io/tprasadtp/protonwire:latest
+    init: true
+    restart: unless-stopped
+    environment:
+      PROTONVPN_SERVER: <your proton Server>
+      WIREGUARD_PRIVATE_KEY: <your Wireguard private key>
+      DEBUG: "0"
+      # Set this to 0 to disable kill-switch.
+      KILL_SWITCH: "1"
+    # NET_ADMIN capability is mandatory!
+    cap_add:
+      - NET_ADMIN
+    # sysctl net.ipv4.conf.all.rp_filter is mandatory!
+    # net.ipv6.conf.all.disable_ipv6 disables IPv6 as protonVPN does not support IPv6.
+    # 'net.*' sysctls are not required on application containers,
+    # as they share network stack with protonwire container.
+    sysctls:
+      net.ipv4.conf.all.rp_filter: 2
+      net.ipv6.conf.all.disable_ipv6: 1
+    volumes:
+      - type: tmpfs
+        target: /tmp
+    ports:
+      - 8080:8080
+
+  sabnzbd:
+    image: lscr.io/linuxserver/sabnzbd:latest
+    network_mode: service:protonwire
+    container_name: sabnzbd
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Zurich
+    volumes:
+      - ./config/sabnzbd:/config
+      - /mnt/data/downloads:/downloads
+      - /mnt/data/downloads/tmp:/incomplete-downloads
+    depends_on:
+      - protonwire
+    restart: unless-stopped
+
+  prowlarr:
+        image: lscr.io/linuxserver/prowlarr:latest
+        container_name: prowlarr
+        environment:
+            - PUID=1000
+            - PGID=1000
+            - TZ=Europe/Zurich
+        volumes:
+            - ./config/prowlarr:/config
+        ports:
+            - 9696:9696
+        depends_on:
+            - protonwire
+        restart: unless-stopped
+
+  sonarr:
+    image: linuxserver/sonarr
+    container_name: sonarr
+    environment:
+        - PUID=1000
+        - PGID=1000
+        - TZ=Europe/Zurich
+    volumes:
+        - ./config/sonarr:/config
+        - /mnt/data:/mnt/data
+    ports:
+        - 8989:8989
+    depends_on:
+        - prowlarr
+        - protonwire
+    restart: unless-stopped
+
+  radarr:
+    image: linuxserver/radarr
+    container_name: radarr
+    hostname: radarr
+    environment:
+        - PUID=1000
+        - PGID=1000
+        - TZ=Europe/Zurich
+    volumes:
+        - ./config/radarr:/config
+        - /mnt/data:/mnt/data
+    ports:
+        - 7878:7878
+    depends_on:
+        - prowlarr
+        - protonwire
+    restart: unless-stopped
+   
+  readarr:
+    image: lscr.io/linuxserver/readarr:nightly
+    container_name: readarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Zurich
+    volumes:
+      - ./config/readarr:/config
+      - /mnt/data:/mnt/data
+    ports:
+      - 8787:8787
+    restart: unless-stopped
+  
+  overseerr:
+    image: lscr.io/linuxserver/overseerr:latest
+    container_name: overseerr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Zurich
+    volumes:
+      - ./config/overseerr:/config
+    ports:
+      - 5055:5055
+    restart: unless-stopped
